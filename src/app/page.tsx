@@ -5,7 +5,7 @@ import { supabase } from "@/lib/supabase";
 import { Auth } from "@/components/Auth";
 import { UserDashboardView } from "@/components/UserDashboardView";
 import { OTPVerification } from "@/components/OTPVerification";
-import { Lock, Shield, Zap, Globe, MessageSquare, Phone, MapPin, Video as VideoIcon, Terminal, Cpu, Radio, Activity, Sparkles, Fingerprint, Flame, Users, Star, Heart, ArrowRight, ShieldAlert, Network, Box } from "lucide-react";
+import { Lock, Shield, Zap, Globe, MessageSquare, Phone, MapPin, Video as VideoIcon, Terminal, Cpu, Activity, Sparkles, Fingerprint, Flame, Users, Star, Heart, ArrowRight, ShieldAlert, Network, Box } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { generateKeyPair, exportPublicKey, exportPrivateKey, importPrivateKey } from "@/lib/crypto";
 import { toast } from "sonner";

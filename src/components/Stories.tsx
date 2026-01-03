@@ -5,8 +5,9 @@ import { supabase } from "@/lib/supabase";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
   Plus, Camera, X, ChevronLeft, ChevronRight, Eye, Clock, 
-  Radio, Loader2, ImageIcon, Play, Shield, ArrowLeft, Star, Save, CameraOff, SwitchCamera, Trash2
+  Loader2, ImageIcon, Play, Shield, ArrowLeft, Star, Save, CameraOff, SwitchCamera, Trash2
 } from "lucide-react";
+
 import { AvatarDisplay } from "@/components/AvatarDisplay";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
