@@ -9,8 +9,7 @@ import {
   MessageCircle, Phone, Settings, LogOut, Users,
   Search, ChevronRight, Shield, Plus,
   Home, Camera, X, Menu, User, Heart,
-  ExternalLink, Flame, Film, CalendarHeart, Lock, Layers, Image, UserPlus, Bell, Clock, Check, Trash2, Send,
-  Activity, Globe
+  Radio, ExternalLink, Flame, Film, CalendarHeart, Lock, Music, Layers, Image, UserPlus, Bell, Clock, Check, Trash2, Send
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AvatarDisplay } from "@/components/AvatarDisplay";
@@ -713,7 +712,7 @@ export function UserDashboardView({ session, privateKey }: UserDashboardViewProp
                                 {notification.type === "call" && <Phone className="w-4 h-4" />}
                                 {notification.type === "friend_request" && <UserPlus className="w-4 h-4" />}
                                 {notification.type === "story" && <Camera className="w-4 h-4" />}
-                                {notification.type === "broadcast" && <Globe className="w-4 h-4" />}
+                                {notification.type === "broadcast" && <Radio className="w-4 h-4" />}
                               </div>
                               <div className="flex-1 min-w-0">
                                 <p className="font-bold text-sm">{notification.title}</p>
@@ -817,11 +816,10 @@ export function UserDashboardView({ session, privateKey }: UserDashboardViewProp
                     </AnimatePresence>
                   </div>
                   {broadcasts.length > 0 && (
-                    <div className="bg-indigo-600 rounded-2xl p-6 text-white">
-                      <div className="flex items-center gap-3 mb-4"><Globe className="w-4 h-4 animate-pulse" /><span className="text-[10px] font-black uppercase tracking-widest">Broadcast</span></div>
-                      <p className="text-xl font-black italic">"{broadcasts[0].content}"</p>
-                    </div>
-
+                  <div className="bg-indigo-600 rounded-2xl p-6 text-white">
+                    <div className="flex items-center gap-3 mb-4"><Radio className="w-4 h-4 animate-pulse" /><span className="text-[10px] font-black uppercase tracking-widest">Broadcast</span></div>
+                    <p className="text-xl font-black italic">"{broadcasts[0].content}"</p>
+                  </div>
                 )}
                 <div className="grid grid-cols-3 gap-4">
                   {[
