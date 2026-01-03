@@ -35,21 +35,24 @@ import {
   ChevronUp,
   MoreVertical,
   Rewind,
-  FastForward
+  FastForward,
+  ShieldCheck
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Slider } from "@/components/ui/slider";
+import { encryptMessage, decryptMessage, importPublicKey } from "@/lib/crypto";
 
 interface WatchPartyProps {
   contact: any;
   onClose: () => void;
   userId: string;
+  privateKey: CryptoKey;
   isInitiator?: boolean;
   incomingSignal?: any;
 }
 
-export function WatchParty({ contact, onClose, userId, isInitiator = true, incomingSignal }: WatchPartyProps) {
+export function WatchParty({ contact, onClose, userId, privateKey, isInitiator = true, incomingSignal }: WatchPartyProps) {
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
   const [isMuted, setIsMuted] = useState(false);
@@ -73,13 +76,11 @@ export function WatchParty({ contact, onClose, userId, isInitiator = true, incom
   const [showChat, setShowChat] = useState(false);
   const [chatMessages, setChatMessages] = useState<{id: string; text: string; sender: string; time: Date}[]>([]);
   const [chatInput, setChatInput] = useState("");
-  const [receivedVideoChunks, setReceivedVideoChunks] = useState<ArrayBuffer[]>([]);
   const [receivingVideo, setReceivingVideo] = useState(false);
   const [videoReceiveProgress, setVideoReceiveProgress] = useState(0);
   const [totalVideoSize, setTotalVideoSize] = useState(0);
   const [sendingVideo, setSendingVideo] = useState(false);
   const [videoSendProgress, setVideoSendProgress] = useState(0);
-  const [showMobileControls, setShowMobileControls] = useState(false);
   const [videosExpanded, setVideosExpanded] = useState(true);
 
   const myVideo = useRef<HTMLVideoElement>(null);
@@ -99,6 +100,7 @@ export function WatchParty({ contact, onClose, userId, isInitiator = true, incom
   const videoChunksRef = useRef<ArrayBuffer[]>([]);
   const expectedChunksRef = useRef<number>(0);
   const receivedChunksCountRef = useRef<number>(0);
+  const partnerPublicKeyRef = useRef<CryptoKey | null>(null);
 
   useEffect(() => {
     if (myVideo.current && stream) {
@@ -126,18 +128,14 @@ export function WatchParty({ contact, onClose, userId, isInitiator = true, incom
         const videoTracks = remoteStream.getVideoTracks();
         const hasVideo = videoTracks.length > 0 && videoTracks.some(track => track.enabled && !track.muted && track.readyState === 'live');
         setHasRemoteVideo(hasVideo);
-        console.log("Updated remote video state:", hasVideo);
       };
 
       updateVideoState();
-      
       remoteStream.getVideoTracks().forEach(track => {
         track.onended = updateVideoState;
         track.onmute = updateVideoState;
         track.onunmute = updateVideoState;
       });
-
-      // Also listen for new tracks being added to the stream
       remoteStream.onaddtrack = updateVideoState;
       remoteStream.onremovetrack = updateVideoState;
       
@@ -188,6 +186,37 @@ export function WatchParty({ contact, onClose, userId, isInitiator = true, incom
       }
     };
   }, [showVideoSetup, hideControlsAfterDelay]);
+
+  const encryptSignal = async (data: any) => {
+    if (!partnerPublicKeyRef.current) {
+      if (contact.public_key) {
+        partnerPublicKeyRef.current = await importPublicKey(contact.public_key);
+      } else {
+        return JSON.stringify(data);
+      }
+    }
+    try {
+      const encrypted = await encryptMessage(JSON.stringify(data), partnerPublicKeyRef.current);
+      return JSON.stringify({ encrypted });
+    } catch (e) {
+      console.error("Encryption failed", e);
+      return JSON.stringify(data);
+    }
+  };
+
+  const decryptSignal = async (signalStr: string) => {
+    try {
+      const parsed = JSON.parse(signalStr);
+      if (parsed.encrypted) {
+        const decrypted = await decryptMessage(parsed.encrypted, privateKey);
+        return JSON.parse(decrypted);
+      }
+      return parsed;
+    } catch (e) {
+      console.error("Decryption failed", e);
+      return JSON.parse(signalStr);
+    }
+  };
 
   const processQueuedCandidates = async (pc: RTCPeerConnection) => {
     while (iceCandidateQueue.current.length > 0) {
@@ -305,7 +334,7 @@ export function WatchParty({ contact, onClose, userId, isInitiator = true, incom
         }]);
       }
     } catch (e) {
-    console.error("Failed to parse data channel message:", e);
+      console.error("Failed to parse data channel message:", e);
     }
   }, [contact.username]);
 
@@ -315,17 +344,8 @@ export function WatchParty({ contact, onClose, userId, isInitiator = true, incom
         iceServers: [
           { urls: "stun:stun.l.google.com:19302" },
           { urls: "stun:stun1.l.google.com:19302" },
-          { urls: "stun:stun2.l.google.com:19302" },
-          {
-            urls: "turn:openrelay.metered.ca:80",
-            username: "openrelayproject",
-            credential: "openrelayproject",
-          },
-          {
-            urls: "turn:openrelay.metered.ca:443",
-            username: "openrelayproject",
-            credential: "openrelayproject",
-          },
+          { urls: "turn:openrelay.metered.ca:80", username: "openrelayproject", credential: "openrelayproject" },
+          { urls: "turn:openrelay.metered.ca:443", username: "openrelayproject", credential: "openrelayproject" },
         ],
         iceCandidatePoolSize: 10,
       });
@@ -336,7 +356,6 @@ export function WatchParty({ contact, onClose, userId, isInitiator = true, incom
 
       if (isInitiator) {
         const dataChannel = pc.createDataChannel("watchPartySync");
-        dataChannel.onopen = () => console.log("Data channel open");
         dataChannel.onmessage = handleDataChannelMessage;
         dataChannelRef.current = dataChannel;
       }
@@ -348,28 +367,10 @@ export function WatchParty({ contact, onClose, userId, isInitiator = true, incom
       };
 
       pc.ontrack = (event) => {
-        console.log("WatchParty ontrack event:", event.track.kind, "enabled:", event.track.enabled);
         const [remoteStreamFromEvent] = event.streams;
         if (remoteStreamFromEvent) {
-          console.log("Setting remote stream with tracks:", remoteStreamFromEvent.getTracks().map(t => `${t.kind}:${t.enabled}`));
           setRemoteStream(remoteStreamFromEvent);
-          
-          if (event.track.kind === "video") {
-            setHasRemoteVideo(event.track.enabled);
-            event.track.onmute = () => {
-              console.log("Remote video track muted");
-              setHasRemoteVideo(false);
-            };
-            event.track.onunmute = () => {
-              console.log("Remote video track unmuted");
-              setHasRemoteVideo(true);
-            };
-            event.track.onended = () => {
-              console.log("Remote video track ended");
-              setHasRemoteVideo(false);
-            };
-          }
-          
+          if (event.track.kind === "video") setHasRemoteVideo(event.track.enabled);
           setIsConnecting(false);
           setConnectionStatus("Connected");
         }
@@ -377,10 +378,11 @@ export function WatchParty({ contact, onClose, userId, isInitiator = true, incom
 
       pc.onicecandidate = async (event) => {
         if (event.candidate) {
+          const encryptedData = await encryptSignal({ candidate: event.candidate.toJSON() });
           await supabase.from("calls").insert({
             caller_id: userId,
             receiver_id: contact.id,
-            signal_data: JSON.stringify({ candidate: event.candidate.toJSON() }),
+            signal_data: encryptedData,
             type: "candidate",
             call_mode: "watchparty",
           });
@@ -406,6 +408,10 @@ export function WatchParty({ contact, onClose, userId, isInitiator = true, incom
 
     const startCall = async () => {
       try {
+        if (contact.public_key) {
+          partnerPublicKeyRef.current = await importPublicKey(contact.public_key);
+        }
+
         const localStream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: "user" },
           audio: true,
@@ -424,72 +430,56 @@ export function WatchParty({ contact, onClose, userId, isInitiator = true, incom
         if (isInitiator) {
           const offer = await pc.createOffer();
           await pc.setLocalDescription(offer);
+          const encryptedData = await encryptSignal({ sdp: pc.localDescription });
           await supabase.from("calls").insert({
             caller_id: userId,
             receiver_id: contact.id,
-            signal_data: JSON.stringify({ sdp: pc.localDescription }),
+            signal_data: encryptedData,
             type: "offer",
             call_mode: "watchparty",
           });
-        } else if (incomingSignal?.sdp) {
-          await pc.setRemoteDescription(new RTCSessionDescription(incomingSignal.sdp));
-          remoteDescriptionSet.current = true;
-          await processQueuedCandidates(pc);
-          const answer = await pc.createAnswer();
-          await pc.setLocalDescription(answer);
-          await supabase.from("calls").insert({
-            caller_id: userId,
-            receiver_id: contact.id,
-            signal_data: JSON.stringify({ sdp: pc.localDescription }),
-            type: "answer",
-            call_mode: "watchparty",
-          });
+        } else if (incomingSignal) {
+          const signal = await decryptSignal(JSON.stringify(incomingSignal));
+          if (signal.sdp) {
+            await pc.setRemoteDescription(new RTCSessionDescription(signal.sdp));
+            remoteDescriptionSet.current = true;
+            await processQueuedCandidates(pc);
+            const answer = await pc.createAnswer();
+            await pc.setLocalDescription(answer);
+            const encryptedData = await encryptSignal({ sdp: pc.localDescription });
+            await supabase.from("calls").insert({
+              caller_id: userId,
+              receiver_id: contact.id,
+              signal_data: encryptedData,
+              type: "answer",
+              call_mode: "watchparty",
+            });
+          }
         }
 
         const channelId = [userId, contact.id].sort().join("-");
         const channel = supabase
           .channel(`watchparty-${channelId}`)
-          .on(
-            "postgres_changes",
-            { event: "INSERT", schema: "public", table: "calls", filter: `receiver_id=eq.${userId}` },
-            async (payload) => {
-              const data = payload.new;
-              if (!peerConnection.current) return;
-              const signalData = JSON.parse(data.signal_data);
+          .on("postgres_changes", { event: "INSERT", schema: "public", table: "calls", filter: `receiver_id=eq.${userId}` }, async (payload) => {
+            const data = payload.new;
+            if (!peerConnection.current) return;
+            const signalData = await decryptSignal(data.signal_data);
 
-              if (data.type === "answer" && isInitiator && signalData.sdp && !hasAnswered.current) {
-                hasAnswered.current = true;
-                await peerConnection.current.setRemoteDescription(
-                  new RTCSessionDescription(signalData.sdp)
-                );
-                remoteDescriptionSet.current = true;
-                await processQueuedCandidates(peerConnection.current);
-              } else if (data.type === "candidate" && signalData.candidate) {
-                if (remoteDescriptionSet.current) {
-                  await peerConnection.current.addIceCandidate(
-                    new RTCIceCandidate(signalData.candidate)
-                  );
-                } else {
-                  iceCandidateQueue.current.push(signalData.candidate);
-                }
-              } else if (data.type === "offer" && !isInitiator && signalData.sdp) {
-                await peerConnection.current.setRemoteDescription(new RTCSessionDescription(signalData.sdp));
-                remoteDescriptionSet.current = true;
-                await processQueuedCandidates(peerConnection.current);
-                const answer = await peerConnection.current.createAnswer();
-                await peerConnection.current.setLocalDescription(answer);
-                await supabase.from("calls").insert({
-                  caller_id: userId,
-                  receiver_id: contact.id,
-                  signal_data: JSON.stringify({ sdp: peerConnection.current.localDescription }),
-                  type: "answer",
-                  call_mode: "watchparty",
-                });
-              } else if (data.type === "end") {
-                endCall();
+            if (data.type === "answer" && isInitiator && signalData.sdp && !hasAnswered.current) {
+              hasAnswered.current = true;
+              await peerConnection.current.setRemoteDescription(new RTCSessionDescription(signalData.sdp));
+              remoteDescriptionSet.current = true;
+              await processQueuedCandidates(peerConnection.current);
+            } else if (data.type === "candidate" && signalData.candidate) {
+              if (remoteDescriptionSet.current) {
+                await peerConnection.current.addIceCandidate(new RTCIceCandidate(signalData.candidate));
+              } else {
+                iceCandidateQueue.current.push(signalData.candidate);
               }
+            } else if (data.type === "end") {
+              endCall();
             }
-          )
+          })
           .subscribe();
         channelRef.current = channel;
       } catch (err) {
@@ -502,33 +492,19 @@ export function WatchParty({ contact, onClose, userId, isInitiator = true, incom
     startCall();
     return () => {
       isMounted = false;
-      if (stream) {
-        stream.getTracks().forEach((t) => t.stop());
-      }
-      if (peerConnection.current) {
-        peerConnection.current.close();
-      }
-      if (channelRef.current) {
-        supabase.removeChannel(channelRef.current);
-      }
+      if (stream) stream.getTracks().forEach((t) => t.stop());
+      if (peerConnection.current) peerConnection.current.close();
+      if (channelRef.current) supabase.removeChannel(channelRef.current);
     };
-  }, [isInitiator, incomingSignal, createPeerConnection]);
+  }, []);
 
   const endCall = async () => {
     try {
-      await supabase
-        .from("calls")
-        .insert({ caller_id: userId, receiver_id: contact.id, type: "end", signal_data: "{}" });
+      await supabase.from("calls").insert({ caller_id: userId, receiver_id: contact.id, type: "end", signal_data: "{}" });
     } catch (e) {}
-    if (stream) {
-      stream.getTracks().forEach((t) => t.stop());
-    }
-    if (peerConnection.current) {
-      peerConnection.current.close();
-    }
-    if (localMovieUrl) {
-      URL.revokeObjectURL(localMovieUrl);
-    }
+    if (stream) stream.getTracks().forEach((t) => t.stop());
+    if (peerConnection.current) peerConnection.current.close();
+    if (localMovieUrl) URL.revokeObjectURL(localMovieUrl);
     onClose();
   };
 
@@ -546,12 +522,6 @@ export function WatchParty({ contact, onClose, userId, isInitiator = true, incom
     }
   };
 
-  const toggleSpeaker = () => {
-    if (userVideo.current) userVideo.current.muted = !userVideo.current.muted;
-    if (remoteAudio.current) remoteAudio.current.muted = !remoteAudio.current.muted;
-    setIsSpeakerOn(!isSpeakerOn);
-  };
-
   const flipCamera = async () => {
     if (!stream) return;
     const newFacingMode = facingMode === "user" ? "environment" : "user";
@@ -565,20 +535,14 @@ export function WatchParty({ contact, onClose, userId, isInitiator = true, incom
       const newVideoTrack = newStream.getVideoTracks()[0];
       if (peerConnection.current) {
         const sender = peerConnection.current.getSenders().find((s) => s.track?.kind === "video");
-        if (sender) {
-          await sender.replaceTrack(newVideoTrack);
-        }
+        if (sender) await sender.replaceTrack(newVideoTrack);
       }
       const audioTrack = stream.getAudioTracks()[0];
       const updatedStream = new MediaStream([newVideoTrack, audioTrack]);
       setStream(updatedStream);
-      if (myVideo.current) {
-        myVideo.current.srcObject = updatedStream;
-      }
+      if (myVideo.current) myVideo.current.srcObject = updatedStream;
     } catch (err) {
-      console.error("Failed to flip camera:", err);
       toast.error("Could not switch camera");
-      setFacingMode(facingMode);
     }
   };
 
@@ -629,15 +593,11 @@ export function WatchParty({ contact, onClose, userId, isInitiator = true, incom
   };
 
   const handleTimeUpdate = () => {
-    if (movieVideo.current) {
-      setCurrentTime(movieVideo.current.currentTime);
-    }
+    if (movieVideo.current) setCurrentTime(movieVideo.current.currentTime);
   };
 
   const handleLoadedMetadata = () => {
-    if (movieVideo.current) {
-      setDuration(movieVideo.current.duration);
-    }
+    if (movieVideo.current) setDuration(movieVideo.current.duration);
   };
 
   const skip = (seconds: number) => {
@@ -664,19 +624,9 @@ export function WatchParty({ contact, onClose, userId, isInitiator = true, incom
     const h = Math.floor(seconds / 3600);
     const m = Math.floor((seconds % 3600) / 60);
     const s = Math.floor(seconds % 60);
-    if (h > 0) {
-      return `${h}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
-    }
+    if (h > 0) return `${h}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
     return `${m}:${s.toString().padStart(2, "0")}`;
   };
-
-  const formatDuration = (s: number) => {
-    const m = Math.floor(s / 60);
-    const sec = s % 60;
-    return `${m}:${sec.toString().padStart(2, "0")}`;
-  };
-
-  const videoSource = localMovieUrl || movieUrl;
 
   const sendChatMessage = () => {
     if (chatInput.trim()) {
@@ -693,9 +643,7 @@ export function WatchParty({ contact, onClose, userId, isInitiator = true, incom
   };
 
   useEffect(() => {
-    if (chatEndRef.current) {
-      chatEndRef.current.scrollIntoView({ behavior: "smooth" });
-    }
+    if (chatEndRef.current) chatEndRef.current.scrollIntoView({ behavior: "smooth" });
   }, [chatMessages]);
 
   return (
@@ -721,6 +669,10 @@ export function WatchParty({ contact, onClose, userId, isInitiator = true, incom
                     <MonitorPlay className="w-8 h-8 sm:w-10 sm:h-10 text-indigo-400" />
                   </div>
                   <h2 className="text-xl sm:text-2xl font-black uppercase italic tracking-tighter">Watch Party</h2>
+                  <div className="flex items-center justify-center gap-2 mb-2 sm:mb-4">
+                    <ShieldCheck className="w-4 h-4 text-emerald-500" />
+                    <p className="text-emerald-400 font-bold uppercase tracking-widest text-[8px]">E2E Encrypted</p>
+                  </div>
                   <p className="text-xs sm:text-sm text-white/40 font-medium">
                     {isInitiator 
                       ? `Select a movie to watch together with ${contact.username}`
@@ -826,12 +778,6 @@ export function WatchParty({ contact, onClose, userId, isInitiator = true, incom
                         Play
                       </Button>
                     </div>
-                    
-                    {isConnecting && (
-                      <p className="text-center text-[10px] sm:text-xs text-amber-400 font-medium">
-                        Waiting for connection before uploading...
-                      </p>
-                    )}
                   </div>
                 ) : (
                   <div className="space-y-4 text-center py-6 sm:py-8">
@@ -844,11 +790,6 @@ export function WatchParty({ contact, onClose, userId, isInitiator = true, incom
                         : `${contact.username} will select a video to watch together`
                       }
                     </p>
-                    <div className="flex items-center justify-center gap-2">
-                      <div className="w-2 h-2 bg-indigo-500 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
-                      <div className="w-2 h-2 bg-indigo-500 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
-                      <div className="w-2 h-2 bg-indigo-500 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
-                    </div>
                   </div>
                 )}
 
@@ -868,7 +809,7 @@ export function WatchParty({ contact, onClose, userId, isInitiator = true, incom
                 <motion.div
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="w-24 sm:w-32 aspect-[3/4] rounded-2xl overflow-hidden border-2 border-white/20 shadow-2xl bg-black"
+                  className="w-24 sm:w-32 aspect-[3/4] rounded-2xl overflow-hidden border-2 border-white/20 shadow-2xl bg-black relative"
                 >
                   <video
                     ref={myVideo}
@@ -913,7 +854,7 @@ export function WatchParty({ contact, onClose, userId, isInitiator = true, incom
         <>
           <video
             ref={movieVideo}
-            src={videoSource}
+            src={localMovieUrl || movieUrl}
             className="w-full h-full object-contain bg-black"
             onTimeUpdate={handleTimeUpdate}
             onLoadedMetadata={handleLoadedMetadata}
@@ -922,11 +863,8 @@ export function WatchParty({ contact, onClose, userId, isInitiator = true, incom
             playsInline
           />
 
-          <div className={`absolute top-2 sm:top-4 left-2 sm:left-4 right-2 sm:right-4 z-20 transition-all ${videosExpanded ? "" : ""}`}>
-            <motion.div 
-              className="flex items-start gap-2"
-              initial={false}
-            >
+          <div className="absolute top-2 sm:top-4 left-2 sm:left-4 right-2 sm:right-4 z-20">
+            <motion.div className="flex items-start gap-2" initial={false}>
               <AnimatePresence>
                 {videosExpanded && (
                   <>
@@ -938,7 +876,7 @@ export function WatchParty({ contact, onClose, userId, isInitiator = true, incom
                     >
                       {remoteStream && hasRemoteVideo ? (
                         <video ref={userVideo} autoPlay playsInline className="w-full h-full object-cover" />
-                      ) : remoteStream ? (
+                      ) : (
                         <div className="w-full h-full flex flex-col items-center justify-center bg-zinc-900">
                           <Avatar className="h-8 w-8 sm:h-12 sm:h-14 sm:w-14">
                             <AvatarImage src={contact.avatar_url} />
@@ -946,12 +884,6 @@ export function WatchParty({ contact, onClose, userId, isInitiator = true, incom
                               {contact.username?.substring(0, 2).toUpperCase()}
                             </AvatarFallback>
                           </Avatar>
-                          <p className="text-[8px] text-white/40 mt-1 hidden sm:block">Camera off</p>
-                        </div>
-                      ) : (
-                        <div className="w-full h-full flex flex-col items-center justify-center bg-zinc-900">
-                          <div className="w-6 h-6 sm:w-8 sm:h-8 border-2 border-white/20 border-t-emerald-500 rounded-full animate-spin mb-1 sm:mb-2" />
-                          <p className="text-[8px] text-white/40 hidden sm:block">Connecting...</p>
                         </div>
                       )}
                       <div className="absolute bottom-1 left-1/2 -translate-x-1/2 bg-black/60 px-1.5 sm:px-2 py-0.5 rounded-full">
@@ -965,7 +897,7 @@ export function WatchParty({ contact, onClose, userId, isInitiator = true, incom
                       exit={{ opacity: 0, scale: 0.8 }}
                       className="w-20 sm:w-28 md:w-36 aspect-[3/4] rounded-xl sm:rounded-2xl overflow-hidden border-2 border-white/20 shadow-2xl bg-black relative"
                     >
-                      {stream ? (
+                      {stream && (
                         <video
                           ref={myVideo}
                           autoPlay
@@ -974,15 +906,6 @@ export function WatchParty({ contact, onClose, userId, isInitiator = true, incom
                           className="w-full h-full object-cover"
                           style={{ transform: facingMode === "user" ? "scaleX(-1)" : "none" }}
                         />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center bg-zinc-900">
-                          <div className="w-6 h-6 sm:w-8 sm:h-8 border-2 border-white/20 border-t-indigo-500 rounded-full animate-spin" />
-                        </div>
-                      )}
-                      {isVideoOff && stream && (
-                        <div className="absolute inset-0 bg-zinc-900 flex items-center justify-center">
-                          <CameraOff className="w-5 h-5 sm:w-6 sm:h-6 text-white/30" />
-                        </div>
                       )}
                       <div className="absolute bottom-1 left-1/2 -translate-x-1/2 bg-black/60 px-1.5 sm:px-2 py-0.5 rounded-full">
                         <p className="text-[7px] sm:text-[8px] font-bold text-white/60 uppercase">You</p>
@@ -1009,131 +932,43 @@ export function WatchParty({ contact, onClose, userId, isInitiator = true, incom
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                transition={{ duration: 0.2 }}
                 className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/40 pointer-events-none"
               >
                 <div className="absolute top-2 sm:top-4 left-1/2 -translate-x-1/2 flex items-center gap-2 sm:gap-3 pointer-events-auto z-10">
                   <div className="bg-black/60 backdrop-blur-xl px-3 sm:px-4 py-1.5 sm:py-2 rounded-full border border-white/10 flex items-center gap-2 sm:gap-3">
                     <Film className="w-3 h-3 sm:w-4 sm:h-4 text-indigo-400" />
-                    <span className="text-[10px] sm:text-xs font-bold text-white/60 hidden sm:inline">Watch Party</span>
-                    <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-emerald-500 rounded-full animate-pulse" />
+                    <span className="text-[10px] sm:text-xs font-bold text-white/60">Watch Party</span>
+                    <ShieldCheck className="w-3 h-3 text-emerald-500" />
                   </div>
                 </div>
 
                 <div className="absolute inset-0 flex items-center justify-center pointer-events-auto">
                   <div className="flex items-center gap-3 sm:gap-6">
-                    <Button
-                      onClick={() => skip(-10)}
-                      size="icon"
-                      variant="ghost"
-                      className="h-10 w-10 sm:h-14 sm:w-14 rounded-full bg-white/10 hover:bg-white/20"
-                    >
-                      <Rewind className="w-5 h-5 sm:w-6 sm:h-6" />
-                    </Button>
-                    <Button
-                      onClick={handlePlayPause}
-                      size="icon"
-                      className="h-14 w-14 sm:h-20 sm:w-20 rounded-full bg-white/10 hover:bg-white/20 backdrop-blur-xl border border-white/10"
-                    >
-                      {isPlaying ? <Pause className="w-7 h-7 sm:w-10 sm:h-10" /> : <Play className="w-7 h-7 sm:w-10 sm:h-10 ml-1" />}
-                    </Button>
-                    <Button
-                      onClick={() => skip(10)}
-                      size="icon"
-                      variant="ghost"
-                      className="h-10 w-10 sm:h-14 sm:w-14 rounded-full bg-white/10 hover:bg-white/20"
-                    >
-                      <FastForward className="w-5 h-5 sm:w-6 sm:h-6" />
-                    </Button>
+                    <Button onClick={() => skip(-10)} size="icon" variant="ghost" className="h-10 w-10 sm:h-14 sm:w-14 rounded-full bg-white/10 hover:bg-white/20"><Rewind className="w-5 h-5 sm:w-6 sm:h-6" /></Button>
+                    <Button onClick={handlePlayPause} size="icon" className="h-14 w-14 sm:h-20 sm:w-20 rounded-full bg-white/10 hover:bg-white/20 backdrop-blur-xl border border-white/10">{isPlaying ? <Pause className="w-7 h-7 sm:w-10 sm:h-10" /> : <Play className="w-7 h-7 sm:w-10 sm:h-10 ml-1" />}</Button>
+                    <Button onClick={() => skip(10)} size="icon" variant="ghost" className="h-10 w-10 sm:h-14 sm:w-14 rounded-full bg-white/10 hover:bg-white/20"><FastForward className="w-5 h-5 sm:w-6 sm:h-6" /></Button>
                   </div>
                 </div>
 
                 <div className="absolute bottom-0 left-0 right-0 p-3 sm:p-4 space-y-3 sm:space-y-4 pointer-events-auto safe-area-bottom">
                   <div className="flex items-center gap-2 sm:gap-4">
                     <span className="text-[10px] sm:text-xs font-mono text-white/60 w-10 sm:w-16 text-right">{formatTime(currentTime)}</span>
-                    <Slider
-                      value={[currentTime]}
-                      max={duration || 100}
-                      step={1}
-                      onValueChange={handleSeek}
-                      className="flex-1"
-                    />
+                    <Slider value={[currentTime]} max={duration || 100} step={1} onValueChange={handleSeek} className="flex-1" />
                     <span className="text-[10px] sm:text-xs font-mono text-white/60 w-10 sm:w-16">{formatTime(duration)}</span>
                   </div>
 
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-1 sm:gap-2">
-                      <Button
-                        onClick={toggleMute}
-                        size="icon"
-                        variant="ghost"
-                        className={`h-9 w-9 sm:h-10 sm:w-10 rounded-full ${isMuted ? "bg-red-500/20 text-red-400" : "text-white/60 hover:text-white hover:bg-white/10"}`}
-                      >
-                        {isMuted ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
-                      </Button>
-                      <Button
-                        onClick={toggleVideo}
-                        size="icon"
-                        variant="ghost"
-                        className={`h-9 w-9 sm:h-10 sm:w-10 rounded-full ${isVideoOff ? "bg-red-500/20 text-red-400" : "text-white/60 hover:text-white hover:bg-white/10"}`}
-                      >
-                        {isVideoOff ? <CameraOff className="w-4 h-4" /> : <Camera className="w-4 h-4" />}
-                      </Button>
-                      <Button
-                        onClick={flipCamera}
-                        size="icon"
-                        variant="ghost"
-                        className="h-9 w-9 sm:h-10 sm:w-10 rounded-full text-white/60 hover:text-white hover:bg-white/10"
-                      >
-                        <SwitchCamera className="w-4 h-4" />
-                      </Button>
-                    </div>
-
-                    <div className="hidden sm:flex items-center gap-2">
-                      <Volume2 className="w-4 h-4 text-white/40" />
-                      <Slider
-                        value={[volume]}
-                        max={1}
-                        step={0.1}
-                        onValueChange={handleVolumeChange}
-                        className="w-20 sm:w-24"
-                      />
+                      <Button onClick={toggleMute} size="icon" variant="ghost" className={`h-9 w-9 sm:h-10 sm:w-10 rounded-full ${isMuted ? "bg-red-500/20 text-red-400" : "text-white/60 hover:text-white hover:bg-white/10"}`}><MicOff className="w-4 h-4" /></Button>
+                      <Button onClick={toggleVideo} size="icon" variant="ghost" className={`h-9 w-9 sm:h-10 sm:w-10 rounded-full ${isVideoOff ? "bg-red-500/20 text-red-400" : "text-white/60 hover:text-white hover:bg-white/10"}`}><CameraOff className="w-4 h-4" /></Button>
+                      <Button onClick={flipCamera} size="icon" variant="ghost" className="h-9 w-9 sm:h-10 sm:w-10 rounded-full text-white/60 hover:text-white hover:bg-white/10"><SwitchCamera className="w-4 h-4" /></Button>
                     </div>
 
                     <div className="flex items-center gap-1 sm:gap-2">
-                      {isInitiator && (
-                        <Button
-                          onClick={() => setShowVideoSetup(true)}
-                          size="icon"
-                          variant="ghost"
-                          className="h-9 w-9 sm:h-10 sm:w-10 rounded-full text-white/60 hover:text-white hover:bg-white/10"
-                        >
-                          <Film className="w-4 h-4" />
-                        </Button>
-                      )}
-                      <Button
-                        onClick={() => setShowChat(!showChat)}
-                        size="icon"
-                        variant="ghost"
-                        className={`h-9 w-9 sm:h-10 sm:w-10 rounded-full ${showChat ? "bg-indigo-500/20 text-indigo-400" : "text-white/60 hover:text-white hover:bg-white/10"}`}
-                      >
-                        <MessageCircle className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        onClick={toggleFullscreen}
-                        size="icon"
-                        variant="ghost"
-                        className="h-9 w-9 sm:h-10 sm:w-10 rounded-full text-white/60 hover:text-white hover:bg-white/10 hidden sm:flex"
-                      >
-                        {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
-                      </Button>
-                      <Button
-                        onClick={endCall}
-                        size="icon"
-                        className="h-10 w-10 sm:h-12 sm:w-12 rounded-full bg-red-500 hover:bg-red-600 ml-1 sm:ml-2"
-                      >
-                        <PhoneOff className="w-4 h-4 sm:w-5 sm:h-5" />
-                      </Button>
+                      {isInitiator && <Button onClick={() => setShowVideoSetup(true)} size="icon" variant="ghost" className="h-9 w-9 sm:h-10 sm:w-10 rounded-full text-white/60 hover:text-white hover:bg-white/10"><Film className="w-4 h-4" /></Button>}
+                      <Button onClick={() => setShowChat(!showChat)} size="icon" variant="ghost" className={`h-9 w-9 sm:h-10 sm:w-10 rounded-full ${showChat ? "bg-indigo-500/20 text-indigo-400" : "text-white/60 hover:text-white hover:bg-white/10"}`}><MessageCircle className="w-4 h-4" /></Button>
+                      <Button onClick={toggleFullscreen} size="icon" variant="ghost" className="h-9 w-9 sm:h-10 sm:w-10 rounded-full text-white/60 hover:text-white hover:bg-white/10 hidden sm:flex">{isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}</Button>
+                      <Button onClick={endCall} size="icon" className="h-10 w-10 sm:h-12 sm:w-12 rounded-full bg-red-500 hover:bg-red-600 ml-1 sm:ml-2"><PhoneOff className="w-4 h-4 sm:w-5 sm:h-5" /></Button>
                     </div>
                   </div>
                 </div>
@@ -1147,7 +982,6 @@ export function WatchParty({ contact, onClose, userId, isInitiator = true, incom
                 initial={{ x: "100%" }}
                 animate={{ x: 0 }}
                 exit={{ x: "100%" }}
-                transition={{ type: "spring", damping: 25, stiffness: 300 }}
                 className="absolute top-0 right-0 bottom-0 w-full sm:w-96 bg-black/95 backdrop-blur-xl border-l border-white/10 z-30 flex flex-col"
                 onClick={(e) => e.stopPropagation()}
               >
@@ -1156,69 +990,26 @@ export function WatchParty({ contact, onClose, userId, isInitiator = true, incom
                     <MessageCircle className="w-4 h-4 sm:w-5 sm:h-5 text-indigo-400" />
                     <h3 className="font-black uppercase text-xs sm:text-sm tracking-wider">Chat</h3>
                   </div>
-                  <Button
-                    onClick={() => setShowChat(false)}
-                    size="icon"
-                    variant="ghost"
-                    className="h-8 w-8 rounded-full text-white/60 hover:text-white"
-                  >
-                    <X className="w-4 h-4" />
-                  </Button>
+                  <Button onClick={() => setShowChat(false)} size="icon" variant="ghost" className="h-8 w-8 rounded-full text-white/60 hover:text-white"><X className="w-4 h-4" /></Button>
                 </div>
 
                 <div className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-2 sm:space-y-3 custom-scrollbar">
-                  {chatMessages.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center h-full text-center opacity-40">
-                      <MessageCircle className="w-10 h-10 sm:w-12 sm:h-12 mb-3 sm:mb-4" />
-                      <p className="text-xs sm:text-sm font-medium">No messages yet</p>
-                      <p className="text-[10px] sm:text-xs">Start chatting while watching!</p>
-                    </div>
-                  ) : (
-                    chatMessages.map((msg) => (
-                      <motion.div
-                        key={msg.id}
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        className={`flex ${msg.sender === "me" ? "justify-end" : "justify-start"}`}
-                      >
-                        <div
-                          className={`max-w-[85%] px-3 sm:px-4 py-2 rounded-2xl ${
-                            msg.sender === "me"
-                              ? "bg-indigo-600 text-white rounded-br-md"
-                              : "bg-white/10 text-white rounded-bl-md"
-                          }`}
-                        >
-                          {msg.sender !== "me" && (
-                            <p className="text-[9px] sm:text-[10px] font-bold text-indigo-400 uppercase mb-1">{msg.sender}</p>
-                          )}
-                          <p className="text-xs sm:text-sm">{msg.text}</p>
-                          <p className="text-[8px] sm:text-[9px] opacity-50 mt-1 text-right">
-                            {msg.time.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                          </p>
-                        </div>
-                      </motion.div>
-                    ))
-                  )}
+                  {chatMessages.map((msg) => (
+                    <motion.div key={msg.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className={`flex ${msg.sender === "me" ? "justify-end" : "justify-start"}`}>
+                      <div className={`max-w-[85%] px-3 sm:px-4 py-2 rounded-2xl ${msg.sender === "me" ? "bg-indigo-600 text-white rounded-br-md" : "bg-white/10 text-white rounded-bl-md"}`}>
+                        {msg.sender !== "me" && <p className="text-[9px] sm:text-[10px] font-bold text-indigo-400 uppercase mb-1">{msg.sender}</p>}
+                        <p className="text-xs sm:text-sm">{msg.text}</p>
+                        <p className="text-[8px] sm:text-[9px] opacity-50 mt-1 text-right">{msg.time.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</p>
+                      </div>
+                    </motion.div>
+                  ))}
                   <div ref={chatEndRef} />
                 </div>
 
                 <div className="p-3 sm:p-4 border-t border-white/10 safe-area-bottom">
                   <div className="flex gap-2">
-                    <Input
-                      value={chatInput}
-                      onChange={(e) => setChatInput(e.target.value)}
-                      onKeyDown={(e) => e.key === "Enter" && sendChatMessage()}
-                      placeholder="Type a message..."
-                      className="flex-1 h-10 sm:h-12 bg-white/5 border-white/10 rounded-xl sm:rounded-2xl text-xs sm:text-sm"
-                    />
-                    <Button
-                      onClick={sendChatMessage}
-                      disabled={!chatInput.trim()}
-                      size="icon"
-                      className="h-10 w-10 sm:h-12 sm:w-12 rounded-xl sm:rounded-2xl bg-indigo-600 hover:bg-indigo-700"
-                    >
-                      <Send className="w-4 h-4 sm:w-5 sm:h-5" />
-                    </Button>
+                    <Input value={chatInput} onChange={(e) => setChatInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && sendChatMessage()} placeholder="Type a message..." className="flex-1 h-10 sm:h-12 bg-white/5 border-white/10 rounded-xl sm:rounded-2xl text-xs sm:text-sm" />
+                    <Button onClick={sendChatMessage} disabled={!chatInput.trim()} size="icon" className="h-10 w-10 sm:h-12 sm:w-12 rounded-xl sm:rounded-2xl bg-indigo-600 hover:bg-indigo-700"><Send className="w-4 h-4 sm:w-5 sm:h-5" /></Button>
                   </div>
                 </div>
               </motion.div>

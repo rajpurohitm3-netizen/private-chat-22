@@ -6,11 +6,11 @@ import { supabase } from "@/lib/supabase";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import {
-  MessageCircle, Phone, Settings, LogOut, Users,
-  Search, ChevronRight, Shield, Plus,
-  Home, Camera, X, Menu, User, Heart,
-  Radio, ExternalLink, Flame, Film, CalendarHeart, Lock, Music, Layers, Image, UserPlus, Bell, Clock, Check, Trash2, Send
-} from "lucide-react";
+    MessageCircle, Phone, Settings, LogOut, Users,
+    Search, ChevronRight, Shield, Plus,
+    Home, Camera, X, Menu, User, Heart,
+    ExternalLink, Flame, Film, CalendarHeart, Lock, Layers, Image, UserPlus, Bell, Clock, Check, Trash2, Send
+  } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AvatarDisplay } from "@/components/AvatarDisplay";
 import { Chat } from "@/components/Chat";
@@ -460,11 +460,11 @@ export function UserDashboardView({ session, privateKey }: UserDashboardViewProp
     { id: "settings", icon: Settings, label: "Entity" },
   ];
 
-  const advancedFeatures = [
-    { id: "vault", icon: Shield, label: "Vault", desc: "Private secure storage", color: "from-violet-600 to-purple-600" },
-    { id: "cinema", icon: Film, label: "Cinema", desc: "Watch movies together", color: "from-purple-600 to-indigo-600" },
-    { id: "memories", icon: CalendarHeart, label: "Memories", desc: "Special days calendar", color: "from-pink-600 to-rose-600" },
-  ];
+const advancedFeatures = [
+      { id: "vault", icon: Shield, label: "Vault", desc: "Private secure storage", color: "from-violet-600 to-purple-600" },
+      { id: "cinema", icon: Film, label: "Cinema", desc: "Watch movies together", color: "from-purple-600 to-indigo-600" },
+      { id: "memories", icon: CalendarHeart, label: "Memories", desc: "Special days calendar", color: "from-pink-600 to-rose-600" },
+    ];
 
   const filteredFriendResults = profiles.filter(p =>
     p.username?.toLowerCase().includes(friendSearchQuery.toLowerCase())
@@ -526,7 +526,6 @@ export function UserDashboardView({ session, privateKey }: UserDashboardViewProp
                       {isActive && <motion.div layoutId="mobileIndicator" className="absolute left-0 top-0 bottom-0 w-1 bg-indigo-500 rounded-r-full" />}
                       <item.icon className={`w-4 h-4 ${isActive ? 'text-indigo-400' : 'text-white/20'}`} />
                       <span className="text-[10px] font-bold tracking-widest uppercase">{item.label}</span>
-                      {item.badge && item.badge > 0 && <span className="ml-auto px-2 py-0.5 bg-indigo-600 rounded-full text-[9px] font-bold">{item.badge}</span>}
                     </motion.button>
                   );
                 })}
@@ -559,7 +558,6 @@ export function UserDashboardView({ session, privateKey }: UserDashboardViewProp
                 {isActive && <motion.div layoutId="desktopIndicator" className="absolute left-0 top-0 bottom-0 w-1 bg-indigo-500 rounded-r-full" />}
                 <item.icon className={`w-5 h-5 ${isActive ? 'text-indigo-400' : 'text-white/20'}`} />
                 {sidebarOpen && <span className="text-[10px] font-bold tracking-widest uppercase">{item.label}</span>}
-                {sidebarOpen && item.badge && item.badge > 0 && <span className="ml-auto px-2 py-0.5 bg-indigo-600 rounded-full text-[9px] font-bold">{item.badge}</span>}
               </motion.button>
             );
           })}
@@ -712,7 +710,7 @@ export function UserDashboardView({ session, privateKey }: UserDashboardViewProp
                                 {notification.type === "call" && <Phone className="w-4 h-4" />}
                                 {notification.type === "friend_request" && <UserPlus className="w-4 h-4" />}
                                 {notification.type === "story" && <Camera className="w-4 h-4" />}
-                                {notification.type === "broadcast" && <Radio className="w-4 h-4" />}
+                                {notification.type === "broadcast" && <Shield className="w-4 h-4" />}
                               </div>
                               <div className="flex-1 min-w-0">
                                 <p className="font-bold text-sm">{notification.title}</p>
@@ -745,7 +743,7 @@ export function UserDashboardView({ session, privateKey }: UserDashboardViewProp
         <main className="flex-1 min-h-0 overflow-hidden relative">
           <AnimatePresence mode="wait">
             {activeView === "dashboard" && (
-              <motion.div key="dashboard" initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -30 }} className="h-full overflow-y-auto custom-scrollbar p-5 sm:p-8 md:p-12 space-y-8 pb-32 lg:pb-12">
+<motion.div key="dashboard" initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -30 }} className="h-full overflow-y-auto custom-scrollbar p-5 sm:p-8 md:p-12 space-y-8 pb-32 lg:pb-12">
                   <div className="sm:hidden">
                     <div className="relative">
                       <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20" />
@@ -817,7 +815,7 @@ export function UserDashboardView({ session, privateKey }: UserDashboardViewProp
                   </div>
                   {broadcasts.length > 0 && (
                   <div className="bg-indigo-600 rounded-2xl p-6 text-white">
-                    <div className="flex items-center gap-3 mb-4"><Radio className="w-4 h-4 animate-pulse" /><span className="text-[10px] font-black uppercase tracking-widest">Broadcast</span></div>
+                    <div className="flex items-center gap-3 mb-4"><Shield className="w-4 h-4 animate-pulse" /><span className="text-[10px] font-black uppercase tracking-widest">Broadcast</span></div>
                     <p className="text-xl font-black italic">"{broadcasts[0].content}"</p>
                   </div>
                 )}
@@ -909,7 +907,7 @@ export function UserDashboardView({ session, privateKey }: UserDashboardViewProp
                       <h2 className="text-2xl font-black uppercase italic">Signal Channels</h2>
                       <div className="relative group w-full md:w-80">
                         <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20" />
-                        <input placeholder="Search friends..." value={chatSearchQuery} onChange={(e) => setChatSearchQuery(e.target.value)} className="w-full bg-white/[0.03] border border-white/10 rounded-2xl py-3 pl-12 pr-6 text-sm outline-none focus:border-indigo-500/50 transition-all placeholder:text-white/10" />
+                        <input placeholder="Search friends..." value={chatSearchQuery} onChange={(e) => setChatSearchQuery(e.target.value)} className="w-full bg-white/[0.03] border border-white/10 rounded-2xl py-3_pl-12_pr-6 text-sm outline-none focus:border-indigo-500/50 transition-all placeholder:text-white/10" />
                       </div>
                     </div>
                     
@@ -1211,11 +1209,12 @@ export function UserDashboardView({ session, privateKey }: UserDashboardViewProp
         </main>
 
         <AnimatePresence>
-          {activeCall && <VideoCall key="video-call" userId={session.user.id} contact={activeCall.contact} callType={activeCall.mode} isInitiator={activeCall.isInitiator} incomingSignal={activeCall.incomingSignal} onClose={() => setActiveCall(null)} />}
+          {activeCall && <VideoCall key="video-call" userId={session.user.id} privateKey={privateKey} contact={activeCall.contact} callType={activeCall.mode} isInitiator={activeCall.isInitiator} incomingSignal={activeCall.incomingSignal} onClose={() => setActiveCall(null)} />}
           {activeWatchParty && (
             <WatchParty 
               key="watch-party"
               userId={session.user.id} 
+              privateKey={privateKey}
               contact={activeWatchParty.contact} 
               isInitiator={activeWatchParty.isInitiator ?? true} 
               incomingSignal={activeWatchParty.incomingSignal} 
