@@ -66,7 +66,8 @@ export function MusicPlayer({ onClose }: MusicPlayerProps) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const youtubePlayerRef = useRef<any>(null);
-  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const ytContainerRef = useRef<HTMLDivElement>(null);
+  const [ytReady, setYtReady] = useState(false);
 
   useEffect(() => {
     const savedTracks = localStorage.getItem("music_tracks");
@@ -150,20 +151,34 @@ export function MusicPlayer({ onClose }: MusicPlayerProps) {
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
-    if (files) {
+    if (files && files.length > 0) {
       const newTracks: Track[] = [];
       Array.from(files).forEach((file) => {
-        const url = URL.createObjectURL(file);
-        const name = file.name.replace(/\.[^/.]+$/, "");
-        newTracks.push({
-          id: `local-${Date.now()}-${Math.random()}`,
-          name,
-          url,
-          type: "local"
-        });
+        if (!file.type.startsWith('audio/')) {
+          toast.error(`${file.name} is not an audio file`);
+          return;
+        }
+        try {
+          const url = URL.createObjectURL(file);
+          const name = file.name.replace(/\.[^/.]+$/, "");
+          newTracks.push({
+            id: `local-${Date.now()}-${Math.random()}`,
+            name,
+            url,
+            type: "local"
+          });
+        } catch (err) {
+          console.error("Failed to create object URL:", err);
+          toast.error(`Failed to load ${file.name}`);
+        }
       });
-      setTracks((prev) => [...prev, ...newTracks]);
-      toast.success(`Added ${newTracks.length} track(s)`);
+      if (newTracks.length > 0) {
+        setTracks((prev) => [...prev, ...newTracks]);
+        toast.success(`Added ${newTracks.length} track(s)`);
+      }
+    }
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
     }
   };
 
@@ -321,6 +336,116 @@ export function MusicPlayer({ onClose }: MusicPlayerProps) {
     if (track.type !== "youtube") return null;
     return extractYouTubeId(track.url);
   };
+
+  useEffect(() => {
+    const win = window as any;
+    
+    const initYT = () => {
+      setYtReady(true);
+    };
+
+    if (win.YT && win.YT.Player) {
+      initYT();
+    } else {
+      if (!win.onYouTubeIframeAPIReadyRegistry) {
+        win.onYouTubeIframeAPIReadyRegistry = [];
+        const oldReady = win.onYouTubeIframeAPIReady;
+        win.onYouTubeIframeAPIReady = () => {
+          if (oldReady) oldReady();
+          win.onYouTubeIframeAPIReadyRegistry.forEach((cb: any) => cb());
+        };
+      }
+      win.onYouTubeIframeAPIReadyRegistry.push(initYT);
+
+      const existingScript = document.querySelector('script[src="https://www.youtube.com/iframe_api"]');
+      if (!existingScript) {
+        const tag = document.createElement('script');
+        tag.src = "https://www.youtube.com/iframe_api";
+        const firstScriptTag = document.getElementsByTagName('script')[0];
+        firstScriptTag.parentNode?.insertBefore(tag, firstScriptTag);
+      }
+    }
+
+    return () => {
+      if (win.onYouTubeIframeAPIReadyRegistry) {
+        win.onYouTubeIframeAPIReadyRegistry = win.onYouTubeIframeAPIReadyRegistry.filter((cb: any) => cb !== initYT);
+      }
+      if (youtubePlayerRef.current) {
+        youtubePlayerRef.current.destroy();
+        youtubePlayerRef.current = null;
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    const win = window as any;
+    if (!ytReady || !currentTrack || currentTrack.type !== "youtube") {
+      return;
+    }
+
+    const videoId = getYouTubeVideoId(currentTrack);
+    if (!videoId) return;
+
+    if (youtubePlayerRef.current) {
+      youtubePlayerRef.current.destroy();
+      youtubePlayerRef.current = null;
+    }
+
+    const createPlayer = () => {
+      if (!ytContainerRef.current) return;
+      
+      youtubePlayerRef.current = new win.YT.Player(ytContainerRef.current, {
+        videoId: videoId,
+        playerVars: {
+          autoplay: 1,
+          controls: 1,
+          modestbranding: 1,
+          rel: 0,
+          playsinline: 1,
+          enablejsapi: 1,
+          origin: typeof window !== "undefined" ? window.location.origin : "",
+        },
+        events: {
+          onReady: (event: any) => {
+            event.target.setVolume(volume * 100);
+            event.target.playVideo();
+            setIsPlaying(true);
+          },
+          onStateChange: (event: any) => {
+            if (event.data === win.YT.PlayerState.PLAYING) {
+              setIsPlaying(true);
+              const dur = event.target.getDuration();
+              if (dur) setDuration(dur);
+            } else if (event.data === win.YT.PlayerState.PAUSED) {
+              setIsPlaying(false);
+            } else if (event.data === win.YT.PlayerState.ENDED) {
+              if (isRepeat) {
+                event.target.seekTo(0);
+                event.target.playVideo();
+              } else {
+                playNext();
+              }
+            }
+          },
+        },
+      });
+    };
+
+    createPlayer();
+  }, [ytReady, currentTrack?.id, currentTrack?.type, volume, isRepeat]);
+
+  useEffect(() => {
+    if (!currentTrack || currentTrack.type !== "youtube" || !youtubePlayerRef.current) return;
+    
+    const interval = setInterval(() => {
+      if (youtubePlayerRef.current?.getCurrentTime) {
+        const time = youtubePlayerRef.current.getCurrentTime();
+        setCurrentTime(time || 0);
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [currentTrack?.id, currentTrack?.type]);
 
   if (isMinimized && currentTrack) {
     return (
@@ -534,19 +659,54 @@ export function MusicPlayer({ onClose }: MusicPlayerProps) {
         )}
       </div>
 
-      {currentTrack && currentTrack.type === "youtube" && (
-        <div className="px-6 pb-4">
-          <div className="relative w-full aspect-video rounded-2xl overflow-hidden bg-black">
-            <iframe
-              ref={iframeRef}
-              src={`https://www.youtube.com/embed/${getYouTubeVideoId(currentTrack)}?autoplay=1&enablejsapi=1`}
-              className="w-full h-full"
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-              allowFullScreen
-            />
+        {currentTrack && currentTrack.type === "youtube" && (
+          <div className="px-6 pb-4">
+            <div className="relative w-full aspect-video rounded-2xl overflow-hidden bg-black">
+              <div ref={ytContainerRef} className="w-full h-full" />
+            </div>
+            <div className="mt-4 space-y-4">
+              <div className="flex items-center gap-3">
+                <span className="text-xs font-mono text-white/40 w-10">{formatTime(currentTime)}</span>
+                <Slider 
+                  value={[currentTime]} 
+                  max={duration || 100} 
+                  step={1} 
+                  onValueChange={(value) => {
+                    if (youtubePlayerRef.current?.seekTo) {
+                      youtubePlayerRef.current.seekTo(value[0], true);
+                      setCurrentTime(value[0]);
+                    }
+                  }} 
+                  className="flex-1" 
+                />
+                <span className="text-xs font-mono text-white/40 w-10 text-right">{formatTime(duration)}</span>
+              </div>
+              <div className="flex items-center justify-center gap-4">
+                <Button onClick={playPrevious} size="icon" variant="ghost" className="h-10 w-10 rounded-xl text-white/60 hover:text-white">
+                  <SkipBack className="w-5 h-5" />
+                </Button>
+                <Button 
+                  onClick={() => {
+                    if (youtubePlayerRef.current) {
+                      if (isPlaying) {
+                        youtubePlayerRef.current.pauseVideo();
+                      } else {
+                        youtubePlayerRef.current.playVideo();
+                      }
+                    }
+                  }} 
+                  size="icon" 
+                  className="h-14 w-14 rounded-2xl bg-red-600 hover:bg-red-700"
+                >
+                  {isPlaying ? <Pause className="w-6 h-6" /> : <Play className="w-6 h-6 ml-0.5" />}
+                </Button>
+                <Button onClick={playNext} size="icon" variant="ghost" className="h-10 w-10 rounded-xl text-white/60 hover:text-white">
+                  <SkipForward className="w-5 h-5" />
+                </Button>
+              </div>
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
       {currentTrack && currentTrack.type === "local" && (
         <div className="p-6 border-t border-white/5 bg-zinc-900/50 backdrop-blur-xl">
