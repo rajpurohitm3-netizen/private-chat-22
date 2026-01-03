@@ -449,10 +449,17 @@ export function MusicParty({ contact, onClose, userId, isInitiator = true, incom
     setIsSpeakerOn(!isSpeakerOn);
   };
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
-    if (files) {
-      Array.from(files).forEach(file => {
+    if (!files || files.length === 0) return;
+    
+    for (const file of Array.from(files)) {
+      if (!file.type.startsWith('audio/')) {
+        toast.error(`${file.name} is not an audio file`);
+        continue;
+      }
+      
+      try {
         const url = URL.createObjectURL(file);
         const name = file.name.replace(/\.[^/.]+$/, "");
         const newTrack: Track = {
@@ -461,12 +468,24 @@ export function MusicParty({ contact, onClose, userId, isInitiator = true, incom
           url,
           type: "local"
         };
+        
         setTracks(prev => [...prev, newTrack]);
-        if (!currentTrack) {
-          setCurrentTrack(newTrack);
+        setCurrentTrack(newTrack);
+        toast.success(`Added: ${name}`);
+        
+        if (dataChannelRef.current && dataChannelRef.current.readyState === "open") {
+          await sendAudioFile(file);
+        } else {
+          toast.info("Partner will hear when connection is ready");
         }
-        sendAudioFile(file);
-      });
+      } catch (err) {
+        console.error("Failed to process file:", err);
+        toast.error(`Failed to load ${file.name}`);
+      }
+    }
+    
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
     }
   };
 
