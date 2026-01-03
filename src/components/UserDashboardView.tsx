@@ -9,7 +9,7 @@ import {
   MessageCircle, Phone, Settings, LogOut, Users,
   Search, ChevronRight, Shield, Plus,
   Home, Camera, X, Menu, User, Heart,
-  Radio, ExternalLink, Flame, Film, CalendarHeart, Lock, Music, Layers, Image, UserPlus, Bell, Clock, Check, Trash2, Send
+  ExternalLink, Flame, Film, CalendarHeart, Lock, Layers, Image, UserPlus, Bell, Clock, Check, Trash2, Send
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AvatarDisplay } from "@/components/AvatarDisplay";
@@ -22,9 +22,7 @@ import { SpecialDays } from "@/components/SpecialDays";
 import { PrivateSafe } from "@/components/PrivateSafe";
 import { PasswordGate } from "@/components/PasswordGate";
 import { FriendRequests } from "@/components/FriendRequests";
-import { MusicPlayer } from "@/components/MusicPlayer";
 import { Cinema } from "@/components/Cinema";
-import { MusicParty } from "@/components/MusicParty";
 
 type ActiveView = "dashboard" | "chat" | "calls" | "connections" | "settings" | "advanced";
 
@@ -89,10 +87,9 @@ export function UserDashboardView({ session, privateKey }: UserDashboardViewProp
   const [broadcasts, setBroadcasts] = useState<any[]>([]);
   const [chatSearchQuery, setChatSearchQuery] = useState("");
   const [friends, setFriends] = useState<string[]>([]);
-  const [friendProfiles, setFriendProfiles] = useState<any[]>([]);
-  const [advancedSubView, setAdvancedSubView] = useState<"menu" | "vault" | "cinema" | "cinema-solo" | "music" | "listen-together" | "memories">("menu");
-  const [activeMusicParty, setActiveMusicParty] = useState<any>(null);
-  const [friendSearchQuery, setFriendSearchQuery] = useState("");
+    const [friendProfiles, setFriendProfiles] = useState<any[]>([]);
+    const [advancedSubView, setAdvancedSubView] = useState<"menu" | "vault" | "cinema" | "cinema-solo" | "memories">("menu");
+    const [friendSearchQuery, setFriendSearchQuery] = useState("");
   const [showFriendSearch, setShowFriendSearch] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [showNotificationPanel, setShowNotificationPanel] = useState(false);
@@ -463,13 +460,11 @@ export function UserDashboardView({ session, privateKey }: UserDashboardViewProp
     { id: "settings", icon: Settings, label: "Entity" },
   ];
 
-const advancedFeatures = [
-      { id: "vault", icon: Shield, label: "Vault", desc: "Private secure storage", color: "from-violet-600 to-purple-600" },
-      { id: "cinema", icon: Film, label: "Cinema", desc: "Watch movies together", color: "from-purple-600 to-indigo-600" },
-      { id: "music", icon: Music, label: "Music", desc: "YouTube & Local files", color: "from-emerald-600 to-teal-600" },
-      { id: "listen-together", icon: Radio, label: "Listen Together", desc: "Sync music with friends", color: "from-cyan-600 to-blue-600" },
-      { id: "memories", icon: CalendarHeart, label: "Memories", desc: "Special days calendar", color: "from-pink-600 to-rose-600" },
-    ];
+  const advancedFeatures = [
+        { id: "vault", icon: Shield, label: "Vault", desc: "Private secure storage", color: "from-violet-600 to-purple-600" },
+        { id: "cinema", icon: Film, label: "Cinema", desc: "Watch movies together", color: "from-purple-600 to-indigo-600" },
+        { id: "memories", icon: CalendarHeart, label: "Memories", desc: "Special days calendar", color: "from-pink-600 to-rose-600" },
+      ];
 
   const filteredFriendResults = profiles.filter(p =>
     p.username?.toLowerCase().includes(friendSearchQuery.toLowerCase())
@@ -1158,81 +1153,35 @@ const advancedFeatures = [
                   </div>
                 )}
 
-{advancedSubView === "music" && (
-                    <div className="h-full">
-                      <div className="p-6 border-b border-white/5">
-                        <Button variant="ghost" onClick={() => setAdvancedSubView("menu")} className="text-white/40 hover:text-white">
-                          <ChevronRight className="w-4 h-4 rotate-180 mr-2" /> Back to Advanced
-                        </Button>
-                      </div>
-                      <div className="h-[calc(100%-80px)]">
-                        <MusicPlayer />
-                      </div>
-                    </div>
-                  )}
-
-                  {advancedSubView === "listen-together" && (
+                  {advancedSubView === "memories" && !selectedFriendForMemories && (
                     <div className="p-6 sm:p-8 pb-32 lg:pb-12">
                       <Button variant="ghost" onClick={() => setAdvancedSubView("menu")} className="mb-6 text-white/40 hover:text-white">
                         <ChevronRight className="w-4 h-4 rotate-180 mr-2" /> Back to Advanced
                       </Button>
                       <div className="mb-8">
-                        <h2 className="text-2xl font-black uppercase italic mb-2">Listen Together</h2>
-                        <p className="text-sm text-white/40">Select a friend to listen to music together in sync</p>
+                        <h2 className="text-2xl font-black uppercase italic mb-2">Memories</h2>
+                        <p className="text-sm text-white/40">Select a friend to view shared memories</p>
                       </div>
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                         {friendProfiles.map(p => (
-                          <div key={p.id} className="p-6 bg-gradient-to-br from-cyan-900/20 to-blue-900/20 border border-white/5 rounded-3xl flex flex-col items-center gap-4 hover:border-cyan-500/30 transition-all group">
-                            <div className="cursor-pointer hover:scale-105 transition-transform relative" onClick={() => router.push(`/profile/${p.id}`)}>
-                              <AvatarDisplay profile={p} className="h-16 w-16" />
-                              <div className="absolute -bottom-1 -right-1 p-1.5 bg-cyan-600 rounded-full">
-                                <Radio className="w-3 h-3 text-white" />
+                          <motion.div key={p.id} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
+                            onClick={() => setSelectedFriendForMemories(p)}
+                            className="p-6 bg-gradient-to-br from-pink-900/20 to-rose-900/20 border border-white/5 rounded-3xl flex flex-col items-center gap-4 hover:border-pink-500/30 transition-all cursor-pointer group">
+                            <div className="relative">
+                              <AvatarDisplay profile={p} className="h-16 w-16 group-hover:scale-105 transition-transform" />
+                              <div className="absolute -bottom-1 -right-1 p-1.5 bg-pink-600 rounded-full">
+                                <CalendarHeart className="w-3 h-3 text-white" />
                               </div>
                             </div>
                             <div className="text-center">
-                              <p className="font-black text-lg uppercase cursor-pointer hover:text-cyan-400 transition-colors" onClick={() => router.push(`/profile/${p.id}`)}>{p.username}</p>
-                              <p className={`text-[10px] font-bold uppercase tracking-widest ${onlineUsers.has(p.id) ? 'text-emerald-500' : 'text-white/20'}`}>
-                                {onlineUsers.has(p.id) ? 'Online' : formatLastSeen(p.last_seen)}
-                              </p>
+                              <p className="font-black text-lg uppercase">{p.username}</p>
+                              <p className="text-[10px] font-bold uppercase tracking-widest text-pink-400">View Memories</p>
                             </div>
-                            <Button onClick={() => setActiveMusicParty({ contact: p })} className="w-full bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 uppercase text-[10px] tracking-widest">
-                              <Radio className="w-4 h-4 mr-2" /> Start Listening
-                            </Button>
-                          </div>
+                          </motion.div>
                         ))}
                       </div>
                     </div>
                   )}
-
-                  {advancedSubView === "memories" && !selectedFriendForMemories && (
-                  <div className="p-6 sm:p-8 pb-32 lg:pb-12">
-                    <Button variant="ghost" onClick={() => setAdvancedSubView("menu")} className="mb-6 text-white/40 hover:text-white">
-                      <ChevronRight className="w-4 h-4 rotate-180 mr-2" /> Back to Advanced
-                    </Button>
-                    <div className="mb-8">
-                      <h2 className="text-2xl font-black uppercase italic mb-2">Memories</h2>
-                      <p className="text-sm text-white/40">Select a friend to view shared memories</p>
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                      {friendProfiles.map(p => (
-                        <motion.div key={p.id} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
-                          onClick={() => setSelectedFriendForMemories(p)}
-                          className="p-6 bg-gradient-to-br from-pink-900/20 to-rose-900/20 border border-white/5 rounded-3xl flex flex-col items-center gap-4 hover:border-pink-500/30 transition-all cursor-pointer group">
-                          <div className="relative">
-                            <AvatarDisplay profile={p} className="h-16 w-16 group-hover:scale-105 transition-transform" />
-                            <div className="absolute -bottom-1 -right-1 p-1.5 bg-pink-600 rounded-full">
-                              <CalendarHeart className="w-3 h-3 text-white" />
-                            </div>
-                          </div>
-                          <div className="text-center">
-                            <p className="font-black text-lg uppercase">{p.username}</p>
-                            <p className="text-[10px] font-bold uppercase tracking-widest text-pink-400">View Memories</p>
-                          </div>
-                        </motion.div>
-                      ))}
-                    </div>
-                  </div>
-                )}
 
                 {advancedSubView === "memories" && selectedFriendForMemories && (
                   <div className="h-full">
@@ -1261,67 +1210,51 @@ const advancedFeatures = [
           </AnimatePresence>
         </main>
 
-        <AnimatePresence>
-          {activeCall && <VideoCall key="video-call" userId={session.user.id} contact={activeCall.contact} callType={activeCall.mode} isInitiator={activeCall.isInitiator} incomingSignal={activeCall.incomingSignal} onClose={() => setActiveCall(null)} />}
-          {activeWatchParty && (
-            <WatchParty 
-              key="watch-party"
-              userId={session.user.id} 
-              contact={activeWatchParty.contact} 
-              isInitiator={activeWatchParty.isInitiator ?? true} 
-              incomingSignal={activeWatchParty.incomingSignal} 
-              onClose={() => setActiveWatchParty(null)} 
-            />
-          )}
-          {activeMusicParty && (
-            <MusicParty 
-              key="music-party"
-              userId={session.user.id} 
-              contact={activeMusicParty.contact} 
-              isInitiator={activeMusicParty.isInitiator ?? true} 
-              incomingSignal={activeMusicParty.incomingSignal} 
-              onClose={() => setActiveMusicParty(null)} 
-            />
-          )}
-          {incomingCall && !activeCall && (
-            <motion.div key="incoming-call" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }} className="fixed inset-0 z-[200] flex items-center justify-center p-6 bg-black/60 backdrop-blur-md">
-              <div className="bg-[#0a0a0a] border border-white/10 rounded-3xl p-10 max-w-sm w-full text-center space-y-8">
-                <AvatarDisplay profile={incomingCall.caller} className="h-32 w-32 mx-auto" />
-                <h3 className="text-4xl font-black italic uppercase">{incomingCall.caller.username}</h3>
-                <p className="text-sm text-white/40 uppercase tracking-wider">
-                  {incomingCall.call_mode === "musicparty" ? "Music Session" : incomingCall.call_mode === "watchparty" ? "Watch Party" : `${incomingCall.call_mode} Call`}
-                </p>
-                <div className="flex gap-4">
-                  <Button onClick={() => setIncomingCall(null)} className="flex-1 bg-red-600 text-xs font-bold uppercase py-4 rounded-2xl">Decline</Button>
-                  <Button onClick={() => { 
-                    const signalData = JSON.parse(incomingCall.signal_data);
-                    if (incomingCall.call_mode === "watchparty") {
-                      setActiveWatchParty({ 
-                        contact: incomingCall.caller, 
-                        isInitiator: false, 
-                        incomingSignal: signalData 
-                      });
-                    } else if (incomingCall.call_mode === "musicparty") {
-                      setActiveMusicParty({ 
-                        contact: incomingCall.caller, 
-                        isInitiator: false, 
-                        incomingSignal: signalData 
-                      });
-                    } else {
-                      setActiveCall({ 
-                        contact: incomingCall.caller, 
-                        mode: incomingCall.call_mode, 
-                        isInitiator: false, 
-                        incomingSignal: signalData 
-                      });
-                    }
-                    setIncomingCall(null); 
-                  }} className="flex-1 bg-emerald-600 text-xs font-bold uppercase py-4 rounded-2xl">Accept</Button>
+          <AnimatePresence>
+            {activeCall && <VideoCall key="video-call" userId={session.user.id} contact={activeCall.contact} callType={activeCall.mode} isInitiator={activeCall.isInitiator} incomingSignal={activeCall.incomingSignal} onClose={() => setActiveCall(null)} />}
+            {activeWatchParty && (
+              <WatchParty 
+                key="watch-party"
+                userId={session.user.id} 
+                contact={activeWatchParty.contact} 
+                isInitiator={activeWatchParty.isInitiator ?? true} 
+                incomingSignal={activeWatchParty.incomingSignal} 
+                onClose={() => setActiveWatchParty(null)} 
+              />
+            )}
+            {incomingCall && !activeCall && (
+              <motion.div key="incoming-call" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }} className="fixed inset-0 z-[200] flex items-center justify-center p-6 bg-black/60 backdrop-blur-md">
+                <div className="bg-[#0a0a0a] border border-white/10 rounded-3xl p-10 max-w-sm w-full text-center space-y-8">
+                  <AvatarDisplay profile={incomingCall.caller} className="h-32 w-32 mx-auto" />
+                  <h3 className="text-4xl font-black italic uppercase">{incomingCall.caller.username}</h3>
+                  <p className="text-sm text-white/40 uppercase tracking-wider">
+                    {incomingCall.call_mode === "watchparty" ? "Watch Party" : `${incomingCall.call_mode} Call`}
+                  </p>
+                  <div className="flex gap-4">
+                    <Button onClick={() => setIncomingCall(null)} className="flex-1 bg-red-600 text-xs font-bold uppercase py-4 rounded-2xl">Decline</Button>
+                    <Button onClick={() => { 
+                      const signalData = JSON.parse(incomingCall.signal_data);
+                      if (incomingCall.call_mode === "watchparty") {
+                        setActiveWatchParty({ 
+                          contact: incomingCall.caller, 
+                          isInitiator: false, 
+                          incomingSignal: signalData 
+                        });
+                      } else {
+                        setActiveCall({ 
+                          contact: incomingCall.caller, 
+                          mode: incomingCall.call_mode, 
+                          isInitiator: false, 
+                          incomingSignal: signalData 
+                        });
+                      }
+                      setIncomingCall(null); 
+                    }} className="flex-1 bg-emerald-600 text-xs font-bold uppercase py-4 rounded-2xl">Accept</Button>
+                  </div>
                 </div>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
         <nav className={`lg:hidden fixed bottom-0 left-0 right-0 border-t border-white/5 bg-[#050505]/95 backdrop-blur-3xl px-2 py-3 flex justify-around items-center z-50 rounded-t-2xl pb-safe transition-all ${(activeView === 'chat' && selectedContact) ? 'translate-y-full' : ''}`}>
           {navItems.map(item => {
